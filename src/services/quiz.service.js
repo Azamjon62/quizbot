@@ -120,7 +120,7 @@ export async function showQuizResults(bot, chatId, session) {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: 'Qayta urinish', callback_data: `retake_${quiz.id}` }],
-                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
+                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quiz.id}` }],
                     [{ text: 'Tetsni ulashish', switch_inline_query: `${quiz.id}` }]
                 ]
             },

@@ -1,12 +1,12 @@
-import { readQuizData } from './read.helper.js';
+import { Quiz } from '../models/Quiz.js';
 
 export async function findQuizById(quizId) {
-    const quizData = await readQuizData();
-    for (const userQuizzes of Object.values(quizData)) {
-        const quiz = userQuizzes.find(q => q.id === quizId);
-        if (quiz) return quiz;
+    try {
+        return await Quiz.findOne({ id: quizId });
+    } catch (error) {
+        console.error('Error finding quiz:', error);
+        return null;
     }
-    return null;
 }
 
 export function validateQuiz(quiz) {

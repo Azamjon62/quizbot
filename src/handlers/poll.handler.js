@@ -235,7 +235,7 @@ export async function sendGroupQuizQuestion(bot, chatId) {
         }
 
         const poll = await bot.sendPoll(chatId, 
-            `[${session.currentQuestion+1}/${quiz.questions.length}]${question.question}`,
+            `[${session.currentQuestion+1}/${quiz.questions.length}] ${question.question}`,
             question.options,
             {
                 type: 'quiz',

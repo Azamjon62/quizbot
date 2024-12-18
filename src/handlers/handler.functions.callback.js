@@ -80,7 +80,7 @@ export async function handleGroupReady(bot, chatId, quizId, user) {
 
     session.readyUsers.add(user.id);
     
-    if (session.readyUsers.size >= 1 && !session.started) {
+    if (session.readyUsers.size >= 2 && !session.started) {
         session.started = true;
         await bot.sendMessage(chatId, "Test boshlanmoqda...");
         setTimeout(async () => {

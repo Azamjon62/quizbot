@@ -1,56 +1,68 @@
-import fs from 'fs/promises';
+import { Quiz } from '../models/Quiz.js';
 
 // Cache for quiz data
 const messageCache = new Map();
+const CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
-// Cache timeout (5 minutes)
-const CACHE_TIMEOUT = 5 * 60 * 1000;
-
-// Function to read quiz data
 export async function readQuizData() {
     try {
         if (messageCache.has('quizData')) {
             return messageCache.get('quizData');
         }
-        const data = await fs.readFile('quizData.json', 'utf8');
-        const parsedData = JSON.parse(data);
-        messageCache.set('quizData', parsedData);
+
+        const quizzes = await Quiz.find({}, { _id: 0 }); // Exclude _id field
+        const groupedQuizzes = quizzes.reduce((acc, quiz) => {
+            if (!acc[quiz.creator]) {
+                acc[quiz.creator] = [];
+            }
+            acc[quiz.creator].push(quiz);
+            return acc;
+        }, {});
+
+        messageCache.set('quizData', groupedQuizzes);
         
         // Clear cache after timeout
         setTimeout(() => {
             messageCache.delete('quizData');
         }, CACHE_TIMEOUT);
         
-        return parsedData;
+        return groupedQuizzes;
     } catch (error) {
         console.error('Error reading quiz data:', error);
         return {};
     }
 }
 
-// Variable for debounced save
-let saveTimeout;
-
-// Function to save quiz data
 export async function saveQuizData(data) {
     try {
-        // Update cache immediately
         messageCache.set('quizData', data);
         
-        // Clear existing timeout
-        if (saveTimeout) {
-            clearTimeout(saveTimeout);
-        }
+        // First, delete all existing documents
+        await Quiz.deleteMany({});
         
-        // Debounce write operations
-        saveTimeout = setTimeout(async () => {
-            try {
-                await fs.writeFile('quizData.json', JSON.stringify(data, null, 2));
-            } catch (error) {
-                console.error('Error saving quiz data:', error);
-            }
-        }, 1000); // 1 second debounce
+        // Convert and clean the data
+        const quizzes = Object.entries(data).flatMap(([creator, userQuizzes]) => 
+            userQuizzes.map(quiz => {
+                // Create a clean object without _id
+                const cleanQuiz = {
+                    id: quiz.id,
+                    creator: Number(creator),
+                    title: quiz.title,
+                    description: quiz.description,
+                    questions: quiz.questions,
+                    timeLimit: quiz.timeLimit,
+                    leaderboard: quiz.leaderboard || []
+                };
+                return cleanQuiz;
+            })
+        );
+
+        // Insert all documents as new
+        if (quizzes.length > 0) {
+            await Quiz.insertMany(quizzes);
+        }
     } catch (error) {
         console.error('Error in saveQuizData:', error);
+        throw error;
     }
 }

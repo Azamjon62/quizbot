@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
+import mongoose from 'mongoose';
 import { setupCallbackHandlers } from './handlers/callback.handler.js';
 import { setupCommandHandlers } from './handlers/command.handler.js';
 import { setupMessageHandlers } from './handlers/message.handler.js';
@@ -7,6 +8,20 @@ import { setupPollHandlers } from './handlers/poll.handler.js';
 import { setupInlineHandlers } from './handlers/inline.handler.js';
 
 dotenv.config();
+
+const connectDB = async () => {
+    try {
+        await mongoose.connect(process.env.MONGO_URI, {
+            dbName: 'quizbot'
+        });
+        console.log('MongoDB connected successfully');
+    } catch (error) {
+        console.error('MongoDB connection error:', error);
+        process.exit(1);
+    }
+};
+
+await connectDB();
 
 // Bot configuration
 const bot = new TelegramBot(process.env.TG_API_TOKEN, {

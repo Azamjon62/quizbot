@@ -31,7 +31,7 @@ export function setupInlineHandlers(bot) {
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: "Bu testni boshlash", url: `https://t.me/${botInfo.username}?start=${quiz.id}` }],
-                        [{ text: "Guruhda testni boshlash", url: `https://t.me/${botInfo.username}?startgroup=${quiz.id}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
+                        [{ text: "Guruhda testni boshlash", url: `https://t.me/${botInfo.username}?startgroup=${quiz.id}` }],
                         [{ text: "Testni ulashish", switch_inline_query: `${quiz.id}` }]
                     ]
                 }

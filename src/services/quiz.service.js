@@ -32,7 +32,7 @@ export async function startQuiz(bot, chatId, quizId, user, isRetake = false) {
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: "Qayta topshirish", callback_data: `retake_${quizId}` }],
-                            [{ text: "Guruhda testni boshlash", url: `https://t.me/${botInfo.username}?startgroup=${quizId}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
+                            [{ text: "Guruhda testni boshlash", url: `https://t.me/${botInfo.username}?startgroup=${quizId}` }],
                             [{ text: "Testni ulashish", switch_inline_query: `${quizId}` }]
                         ]
                     },
@@ -101,9 +101,9 @@ export async function showQuizResults(bot, chatId, session) {
 
         const position = await updateLeaderboard(quiz, {
             chatId,
-            username: session.username,
-            firstName: session.firstName,
-            lastName: session.lastName,
+            username: session.user.username,
+            firstName: session.user.firstName,
+            lastName: session.user.lastName,
             correctAnswers,
             wrongAnswers,
             skippedQuestions
@@ -120,7 +120,7 @@ export async function showQuizResults(bot, chatId, session) {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: 'Qayta urinish', callback_data: `retake_${quiz.id}` }],
-                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quiz.id}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
+                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
                     [{ text: 'Tetsni ulashish', switch_inline_query: `${quiz.id}` }]
                 ]
             },

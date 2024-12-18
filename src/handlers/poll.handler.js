@@ -149,6 +149,14 @@ export async function sendQuizQuestion(bot, chatId) {
                 } else {
                     await bot.sendPhoto(chatId, fileId);
                 }
+            } else if (type === 'document' && fileId) {
+                if (content) {
+                    // await bot.sendAnimation(chatId, fileId, {caption: content})
+                    await bot.sendDocument(chatId, fileId, {caption: content})
+                } else {
+                    // await bot.sendAnimation(chatId, fileId)
+                    await bot.sendDocument(chatId, fileId)
+                }
             } else if (content) {
                 await bot.sendMessage(chatId, content);
             }
@@ -159,7 +167,7 @@ export async function sendQuizQuestion(bot, chatId) {
         }
 
         const poll = await bot.sendPoll(chatId, 
-            question.question,
+            `[${session.currentQuestion+1}/${quiz.questions.length}]${question.question}`,
             question.options,
             {
                 type: 'quiz',
@@ -209,6 +217,14 @@ export async function sendGroupQuizQuestion(bot, chatId) {
                 } else {
                     await bot.sendPhoto(chatId, fileId);
                 }
+            } else if (type === 'document' && fileId) {
+                if (content) {
+                    // await bot.sendAnimation(chatId, fileId, {caption: content})
+                    await bot.sendDocument(chatId, fileId, {caption: content})
+                } else {
+                    // await bot.sendAnimation(chatId, fileId)
+                    await bot.sendDocument(chatId, fileId)
+                }
             } else if (content) {
                 await bot.sendMessage(chatId, content);
             }
@@ -219,7 +235,7 @@ export async function sendGroupQuizQuestion(bot, chatId) {
         }
 
         const poll = await bot.sendPoll(chatId, 
-            question.question,
+            `[${session.currentQuestion+1}/${quiz.questions.length}]${question.question}`,
             question.options,
             {
                 type: 'quiz',

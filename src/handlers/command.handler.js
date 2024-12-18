@@ -1,13 +1,21 @@
 import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
 import { activeQuizCreation, activeQuizSessions } from '../bot.js';
 import { readQuizData } from '../helpers/read.helper.js';
-
+                           // AZ          AS         DO
+const ALLOWED_USER_IDS = [5947470966, 578038920, 892690776];
 export function setupCommandHandlers(bot) {
     // Handler for all commands (messages starting with /)
     bot.on('message', async (msg) => {
+        const chatId = msg.chat.id;
+        const userId = msg.from.id;
+
+        if (!ALLOWED_USER_IDS.includes(userId)) {
+            await bot.sendMessage(chatId, "❌ Kechirasiz, siz bu botdan foydalana olmaysiz.");
+            return;
+        }
+
         if (!msg.text?.startsWith('/')) return;
         
-        const chatId = msg.chat.id;
         const text = msg.text;
 
         // Check if message is from a group
@@ -63,7 +71,7 @@ export function setupCommandHandlers(bot) {
                         reply_markup: {
                             inline_keyboard: [
                                 [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
-                                [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
+                                [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
                                 [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
                                 [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
                                 [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]
@@ -101,7 +109,7 @@ export function setupCommandHandlers(bot) {
                 if (activeQuizCreation.has(chatId)) {
                     activeQuizCreation.delete(chatId);
                     await bot.sendMessage(chatId, 
-                        "Test bekor qilindi. Yangisini yaratish uchun /newquiz buyrugʻini yuboring.", {
+                        "Test bekor qilindi. Yangisini yaratish uchun /start buyrugʻini yuboring.", {
                         reply_markup: {
                             remove_keyboard: true,
                         }

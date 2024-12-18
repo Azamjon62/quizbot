@@ -1,8 +1,8 @@
-import { startQuiz } from '../services/quiz.service.js';
-import { showLeaderboard } from '../services/leaderboard.service.js';
-import { activeQuizCreation, activeQuizSessions, activeGroupQuizSessions } from '../bot.js';
-import { sendQuizQuestion, sendGroupQuizQuestion } from './poll.handler.js';
-import { readQuizData } from '../helpers/read.helper.js';
+import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
+import { 
+    handleViewTests, handleCreateTest, handleStartQuiz, handleReady, handleGroupReady, handleStatistics,
+    handleReturn, handleEdit, handleDeleteTest
+} from './handler.functions.callback.js';
 
 export function setupCallbackHandlers(bot) {
     bot.on('callback_query', async (callbackQuery) => {
@@ -11,78 +11,20 @@ export function setupCallbackHandlers(bot) {
         const user = callbackQuery.from;
 
         try {
-            if (data === 'view_tests') {                
-                const quizData = await readQuizData();
-                const userQuizzes = quizData[chatId] || [];
-
-                if (userQuizzes.length === 0) {
-                    await bot.sendMessage(chatId, "You haven't created any tests yet.");
-                    return;
-                }
-
-                let message = "<b>Testlaringiz</b>\n\n";
-                userQuizzes.forEach((quiz, index) => {
-                    const totalParticipants = quiz.leaderboard ? quiz.leaderboard.length : 0;
-                    message += `${index + 1}. <b>${quiz.title}</b> <i>${totalParticipants} kishi javob berdi</i>\n`;
-                    message += `<i>🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya</i>\n`;
-                    message += `/view_${quiz.id}\n\n`;
-                });
-
-                await bot.sendMessage(chatId, message, {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Create new test', callback_data: 'create_test' }]
-                        ]
-                    },
-                    parse_mode: 'HTML' 
-                });
-            }
-            else if (data === 'create_test') {
-                activeQuizCreation.set(chatId, { step: 'title' });
-                await bot.sendMessage(chatId, 
-                    "Keling, yangi test tuzamiz. Dastlab, menga testingiz sarlavhasini (masalan, “Qobiliyatni aniqlash testi” yoki “Ayiqlar haqida 10 ta savol”) yuboring.");
-            }
-            else if (data.startsWith('start_')) {
+            if (data === 'view_tests') {
+                await handleViewTests(chatId, bot)
+            } else if (data === 'create_test') {
+                await handleCreateTest(chatId, bot)
+            } else if (data.startsWith('start_')) {
                 const quizId = data.split('start_')[1];
-                await startQuiz(bot, chatId, quizId, user);
-            }
-            else if (data.startsWith('ready_')) {
+                await handleStartQuiz(bot, chatId, quizId, user);
+            } else if (data.startsWith('ready_')) {
                 const quizId = data.split('ready_')[1];
-                const session = activeQuizSessions.get(chatId);
-
-                if (!session || session.quizId !== quizId) {
-                    await bot.sendMessage(chatId, "Aktiv quiz topilmadi qayta urinib ko'ring");
-                    return;
-                }
-
-                const countdownMsg = await bot.sendMessage(chatId, "3️⃣...");
-                
-                setTimeout(async () => {
-                    await bot.editMessageText("2️⃣ TAYYORMISIZ?", {
-                        chat_id: chatId,
-                        message_id: countdownMsg.message_id
-                    });
-                    setTimeout(async () => {
-                        await bot.editMessageText("🚀 KETDIK!", {
-                            chat_id: chatId,
-                            message_id: countdownMsg.message_id
-                        });
-                        setTimeout(async () => {
-                            await bot.deleteMessage(chatId, countdownMsg.message_id);
-                            await sendQuizQuestion(bot, chatId);
-                        }, 1000);
-                    }, 1000);
-                }, 1000);
-            }
-            else if (data.startsWith('leaderboard_')) {
-                const quizId = data.split('leaderboard_')[1];
-                await showLeaderboard(bot, chatId, quizId);
-            }
-            else if (data.startsWith('retake_')) {
+                await handleReady(bot, chatId, quizId)
+            } else if (data.startsWith('retake_')) {
                 const quizId = data.split('retake_')[1];
                 await startQuiz(bot, chatId, quizId, user, true);
-            }
-            else if (data.startsWith('share_')) {
+            } else if (data.startsWith('share_')) {
                 const botDetails = await bot.getMe();
                 const quizId = data.split('share_')[1];
 
@@ -91,150 +33,29 @@ export function setupCallbackHandlers(bot) {
 
             } else if (data.startsWith('group_ready_')) {
                 const quizId = data.split('group_ready_')[1];
-                const session = activeGroupQuizSessions.get(chatId);
-
-                if (!session || session.quizId !== quizId) {
-                    await bot.sendMessage(chatId, "Faol test sessiyasi topilmadi.");
-                    return;
-                }
-
-                session.readyUsers.add(user.id);
-                
-                if (session.readyUsers.size >= 1 && !session.started) {
-                    session.started = true;
-                    await bot.sendMessage(chatId, "Test boshlanmoqda...");
-                    setTimeout(async () => {
-                        await sendGroupQuizQuestion(bot, chatId);
-                    }, 2000);
-                } else if (!session.started) {
-                    await bot.sendMessage(chatId, 
-                        `${session.readyUsers.size} kishi tayyor. Kamida 2 kishi tayyor bo'lishi kerak.`);
-                }
-            } else if (data.startsWith('answer_')) {
-                const [_, questionIndex, answerIndex] = data.split('_').map(Number);
-                const session = activeGroupQuizSessions.get(chatId);
-                console.log('b', session);
-                
-
-                if (!session || !session.isGroupQuiz) return;
-
-                const quiz = await findQuizById(session.quizId);
-                const question = quiz.questions[questionIndex];
-
-                if (!question) return;
-
-                let participant = session.participants.get(user.id);
-                if (!participant) {
-                    participant = {
-                        userId: user.id,
-                        username: user.username,
-                        firstName: user.first_name,
-                        lastName: user.last_name,
-                        correctAnswers: 0,
-                        wrongAnswers: 0,
-                        answers: new Set()
-                    };
-                    session.participants.set(user.id, participant);
-                }
-
-                // Only count first answer for each question
-                if (!participant.answers.has(questionIndex)) {
-                    participant.answers.add(questionIndex);
-                    
-                    if (Number(answerIndex) === question.correctAnswer) {
-                        participant.correctAnswers++;
-                    } else {
-                        participant.wrongAnswers++;
-                    }
-                }
-
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: "Javobingiz qabul qilindi!"
-                });
+                await handleGroupReady(bot, chatId, quizId, user)
             } else if (data.startsWith('stats_')) {
                 const quizId = data.split('stats_')[1];
-                try {
-                    const quizData = await readQuizData();
-                    let quiz = null;
-
-                    for (const userQuizzes of Object.values(quizData)) {
-                        const foundQuiz = userQuizzes.find(q => q.id === quizId);
-                        if (foundQuiz) {
-                            quiz = foundQuiz;
-                            break;
-                        }
-                    }
-
-                    if (!quiz) {
-                        await bot.sendMessage(chatId, "Test topilmadi.");
-                        return;
-                    }
-
-                    const participantsCount = quiz.leaderboard?.length || 0;
-                    const message = `🏆 "${quiz.title}" testidagi yuqori natijalar\n\n` +
-                        `🖊 ${quiz.questions.length} ta savol\n` +
-                        `⏱ Har bir savol uchun ${quiz.timeLimit} soniya\n` +
-                        `🤓 ${participantsCount} kishi testda qatnashdi` +
-                        `\n\n${quiz.leaderboard?.map((user, index) => `${index + 1}. ${user.username ? `@${user.username}` : `${user.firstName ? user.firstName : ''} ${user.lastName ? user.lastName : ''}`.trim() || 'Anonymous'} - <b>${user.correctAnswers}</b> ta to'g'ri javob`).join('\n')}`;
-
-                    await bot.editMessageText(message, {
-                        chat_id: chatId,
-                        message_id: callbackQuery.message.message_id,
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: "<< Testga qaytish", callback_data: `return_${quizId}` }]
-                            ]
-                        },
-                        parse_mode: 'HTML'
-                    });
-                } catch (error) {
-                    console.error('Statistics error:', error);
-                    await bot.sendMessage(chatId, "Statistikani ko'rishda xatolik yuz berdi.");
-                }
+                const messageId = callbackQuery.message.message_id;
+                await handleStatistics(bot, chatId, quizId, messageId)
             } else if (data.startsWith('return_')) {
                 const quizId = data.split('return_')[1];
-
-                try {
-                    const quizData = await readQuizData();
-                    let quiz = null;
-
-                    // Find the quiz
-                    for (const userQuizzes of Object.values(quizData)) {
-                        const foundQuiz = userQuizzes.find(q => q.id === quizId);
-                        if (foundQuiz) {
-                            quiz = foundQuiz;
-                            break;
-                        }
-                    }
-
-                    if (!quiz) {
-                        await bot.sendMessage(chatId, "Test topilmadi.");
-                        return;
-                    }
-
-                    const botDetails = await bot.getMe();
-                    const shareLink = `t.me/${botDetails.username}?start=${quizId}`;
-                    const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya\n\n<b>External sharing link:</b>\n${shareLink}`;
-
-                    await bot.editMessageText(message, {
-                        chat_id: chatId,
-                        message_id: callbackQuery.message.message_id,
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
-                                [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
-                                [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
-                                [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
-                                [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]
-                            ]
-                        }
-                    });
-                } catch (error) {
-                    console.error('Return to test error:', error);
-                    await bot.sendMessage(chatId, "Testga qaytishda xatolik yuz berdi.");
-                }
-            }
+                const messageId = callbackQuery.message.message_id;
+                await handleReturn(bot, chatId, quizId, messageId)
+            } else if (data.startsWith('edit_')) {
+                const quizId = data.split('edit_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEdit(bot, chatId, quizId, messageId)
+            } else if (data.startsWith('deleteTest_')) {
+                const quizId = data.split('deleteTest_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleDeleteTest(bot, chatId, quizId, messageId)
+            } 
+            // else if (data.startsWith('editQuestions_')) {
+            //     const quizId = data.split('editQuestions_')[1];
+            //     const messageId = callbackQuery.message.message_id;
+            //     await handleEditQuestion(bot, chatId, quizId, messageId)
+            // }
         } catch (error) {
             console.error('Callback query error:', error);
             await bot.sendMessage(chatId, "An error occurred. Please try again.");
@@ -264,7 +85,7 @@ export function setupCallbackHandlers(bot) {
                 }
 
                 // Start the quiz in the group
-                await startQuiz(bot, msg.chat.id, quizId, msg.from);
+                await startGroupQuiz(bot, msg.chat.id, quizId, msg.from);
             }
         }
     });

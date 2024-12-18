@@ -133,14 +133,16 @@ export function setupMessageHandlers(bot) {
     
                     const shareLink = `t.me/testsquizz_bot?start=${quizId}`;
     
-                    await bot.sendMessage(chatId, '👍 Test Tuzildi.');
+                    await bot.sendMessage(chatId, '👍 Test Tuzildi.', {reply_markup: {
+                        remove_keyboard: true
+                    }});
                     
                     await bot.sendMessage(chatId, 
                         `<b>${userState.title}</b> <i>Hechkim javaob bermadi</i> \nTavsifini: ${userState.description}\n🖊 <b>${userState.questions.length}</b> ta savol · ⏱ <b>${userState.timeLimit}</b> soniya \n\n<b>External sharing link:</b>\n${shareLink}`, {
                         reply_markup: {
                             inline_keyboard: [
                                 [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
-                                [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}&admin=can_post_messages%2Ccan_manage_topics%2Ccan_delete_messages` }],
+                                [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
                                 [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
                                 [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
                                 [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]

@@ -89,8 +89,6 @@ export function setupPollHandlers(bot) {
                         participant.wrongAnswers++;
                     }
                 }
-
-                await sendGroupQuizQuestion(bot, groupChatId);
             }
 
             // Check for private quiz

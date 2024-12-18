@@ -1,4 +1,5 @@
 import { readQuizData, saveQuizData } from "../helpers/read.helper.js";
+import { findQuizById } from "../helpers/quiz.helper.js";
 import { activeQuizCreation, activeQuizSessions, activeGroupQuizSessions } from '../bot.js';
 import { startQuiz } from "../services/quiz.service.js";
 import { sendQuizQuestion, sendGroupQuizQuestion } from "./poll.handler.js";
@@ -72,6 +73,7 @@ export async function handleReady(bot, chatId, quizId) {
 
 export async function handleGroupReady(bot, chatId, quizId, user) {
     const session = activeGroupQuizSessions.get(chatId);
+    const quiz = await findQuizById(quizId);
 
     if (!session || session.quizId !== quizId) {
         await bot.sendMessage(chatId, "Faol test sessiyasi topilmadi.");
@@ -79,9 +81,37 @@ export async function handleGroupReady(bot, chatId, quizId, user) {
     }
 
     session.readyUsers.add(user.id);
+
+    let message = `🎲 "${quiz.title}"\n\n` +
+        `${quiz.description ? quiz.description + '\n\n' : ''}` +
+        `🖊 ${quiz.questions.length} ta savol\n` +
+        `⏱ Har bir savol uchun ${quiz.timeLimit} soniya\n` +
+        `📰 Natijalar guruh a'zolari va test egasiga ko'rinadi\n\n` +
+        `🏁 Test kamida 2 kishi tayyor bo'lganda boshlanadi. To'xtatish uchun /stop buyrug'ini yuboring.`;
+
+    if (session.readyUsers.size == 1) {
+        message += `Tayyorlar soni: 1/2`;
+    }
+
+    // If this is the first person ready, update the message to show count
+    if (session.readyUsers.size === 1) {
+        await bot.editMessageText(message, {
+            chat_id: chatId,
+            message_id: session.startMessageId,
+            reply_markup: {
+                inline_keyboard: [[{ text: "Tayyorman", callback_data: `group_ready_${quizId}` }]]
+            }
+        });
+    }
     
     if (session.readyUsers.size >= 2 && !session.started) {
         session.started = true;
+
+        await bot.editMessageText(message, {
+            chat_id: chatId,
+            message_id: session.startMessageId
+        });
+
         await bot.sendMessage(chatId, "Test boshlanmoqda...");
         setTimeout(async () => {
             await sendGroupQuizQuestion(bot, chatId);

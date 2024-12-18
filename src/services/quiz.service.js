@@ -140,14 +140,19 @@ export async function startGroupQuiz(bot, chatId, quizId) {
             return;
         }
 
-        // Initialize group session
-        activeGroupQuizSessions.set(chatId, {
-            quizId,
-            currentQuestion: 0,
-            participants: new Map(),
-            readyUsers: new Set(),
-            isGroupQuiz: true
-        });
+        let session = activeGroupQuizSessions.get(chatId);
+        if (!session) {
+            session = {
+                quizId,
+                currentQuestion: 0,
+                readyUsers: new Set(),
+                participants: new Map(),
+                answers: new Map(),
+                started: false,
+                startMessageId: null
+            };
+            activeGroupQuizSessions.set(chatId, session);
+        }
 
         const message = `🎲 "${quiz.title}"\n\n` +
             `${quiz.description ? quiz.description + '\n\n' : ''}` +
@@ -156,12 +161,13 @@ export async function startGroupQuiz(bot, chatId, quizId) {
             `📰 Natijalar guruh a'zolari va test egasiga ko'rinadi\n\n` +
             `🏁 Test kamida 2 kishi tayyor bo'lganda boshlanadi. To'xtatish uchun /stop buyrug'ini yuboring.`;
 
-        await bot.sendMessage(chatId, message, {
+        const sentMessage = await bot.sendMessage(chatId, message, {
             reply_markup: {
                 inline_keyboard: [[{ text: "Tayyorman", callback_data: `group_ready_${quizId}` }]]
             }
         });
 
+        session.startMessageId = sentMessage.message_id;
     } catch (error) {
         console.error('Start group quiz error:', error);
         await bot.sendMessage(chatId, "Testni boshlashda xatolik yuz berdi.");

@@ -8,7 +8,7 @@ const QuizSchema = new mongoose.Schema({
     },
     creator: Number,
     title: String,
-    description: String,
+    description: { type: String, default: '' },
     questions: [{
         question: String,
         options: [String],
@@ -18,18 +18,24 @@ const QuizSchema = new mongoose.Schema({
                 type: String,
                 enum: ['text', 'photo', 'document', 'video', 'audio', 'unknown']
             },
-            content: String,
+            content: { type: String, default: '' },
             fileId: String
         }
     }],
+    mixing: {
+        type: String,
+        enum: ['barchasi', 'aralashtirilmaydi', 'savollar', 'javoblar']
+    },
     timeLimit: Number,
     created: { type: Date, default: Date.now },
     leaderboard: [{
         chatId: Number,
-        username: String,
-        firstName: String,
-        lastName: String,
-        correctAnswers: Number,
+        username: { type: String, default: '' },
+        firstName: { type: String, default: '' },
+        lastName: { type: String, default: '' },
+        correctAnswers: { type: Number, default: 0 },
+        wrongAnswers: { type: Number, default: 0 },
+        skippedQuestions: { type: Number, default: 0 },
         timestamp: { type: Date, default: Date.now }
     }]
 }, { 

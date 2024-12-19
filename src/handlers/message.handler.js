@@ -1,13 +1,34 @@
-import { activeQuizCreation } from '../bot.js';
+import { activeQuizCreation, activeMessageId } from '../bot.js';
 import { v4 as uuidv4 } from 'uuid';
 import { readQuizData, saveQuizData } from '../helpers/read.helper.js';
+import { handleEdit, handleDelete, handleEditedTest, handleReturn } from './handler.functions.callback.js';
+import { findQuizById } from '../helpers/quiz.helper.js';
 
 export function setupMessageHandlers(bot) {
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
         const text = msg.text;
         const userState = activeQuizCreation.get(chatId);
-    
+
+        const timeMapping = {
+            '10 Seconds': 10,
+            '15 Seconds': 15,
+            '30 Seconds': 30,
+            '45 Seconds': 45,
+            '1 Minute': 60,
+            '2 Minutes': 120,
+            '3 Minutes': 180,
+            '4 Minutes': 240,
+            '5 Minutes': 300
+        };
+
+        const mixingOptions = {
+            'Barchasini aralashtirish': 'barchasi',
+            'Aralashtirilmasin': 'aralashtirilmaydi',
+            'Faqat savollar': 'savollar',
+            'Faqat javoblar': 'javoblar'
+        };
+
         if (!userState) return;
     
         switch (userState.step) {
@@ -88,57 +109,63 @@ export function setupMessageHandlers(bot) {
                         reply_markup: {
                             keyboard: [[{ text: "Savol tuzish", request_poll: { type: "quiz" } }]],
                             resize_keyboard: true
-                        },
-                        parse_mode: 'HTML'
+                        }
                     });
                 }
                 break;
     
             case 'time_limit':
-                const timeMapping = {
-                    '10 Seconds': 10,
-                    '15 Seconds': 15,
-                    '30 Seconds': 30,
-                    '45 Seconds': 45,
-                    '1 Minute': 60,
-                    '2 Minutes': 120,
-                    '3 Minutes': 180,
-                    '4 Minutes': 240,
-                    '5 Minutes': 300
-                };
-    
                 if (timeMapping[text]) {
                     userState.timeLimit = timeMapping[text];
+
+                    userState.step = 'mixingTest';
+
+                    await bot.sendMessage(chatId, "Savollar va javob variantlari aralashtirilsinmi?", {
+                        reply_markup: {
+                            keyboard: [
+                                [{ text: "Barchasini aralashtirish" }, { text: "Aralashtirilmasin" }],
+                                [{ text: "Faqat savollar" }, { text: "Faqat javoblar" }]
+                            ],
+                            resize_keyboard: true,
+                            one_time_keyboard: true
+                        }
+                    });
+                }
+                break;
+                
+            case 'mixingTest':
+                if (mixingOptions[text]) {
+                    userState.mixing = mixingOptions[text];
                     const quizId = uuidv4().split('-')[0];
                     const quizData = await readQuizData();
                     const botDetails = await bot.getMe();
-    
-                    // Initialize user's quizzes array if it doesn't exist
+
                     if (!quizData[chatId]) {
                         quizData[chatId] = [];
-                    }
-                    
+                    }                    
+
                     const newQuiz = {
                         id: quizId,
                         title: userState.title,
                         description: userState.description,
                         questions: userState.questions,
+                        mixing: userState.mixing,
                         timeLimit: userState.timeLimit,
                         creator: chatId,
                         created: new Date().toISOString()
                     };
-    
+
                     quizData[chatId].push(newQuiz);
                     await saveQuizData(quizData);
-    
+
                     const shareLink = `t.me/testsquizz_bot?start=${quizId}`;
-    
+
                     await bot.sendMessage(chatId, '👍 Test Tuzildi.', {reply_markup: {
                         remove_keyboard: true
                     }});
-                    
+
                     await bot.sendMessage(chatId, 
-                        `<b>${userState.title}</b> <i>Hechkim javaob bermadi</i> \nTavsifini: ${userState.description}\n🖊 <b>${userState.questions.length}</b> ta savol · ⏱ <b>${userState.timeLimit}</b> soniya \n\n<b>External sharing link:</b>\n${shareLink}`, {
+                        `<b>${userState.title}</b> <i>Hechkim javaob bermadi</i> \n${userState.description ? userState.description : ''} \n🖊 <b>${userState.questions.length}</b> ta savol · ⏱ <b>${userState.timeLimit}</b> soniya  · ${userState.mixing == 'barchasi' ? '🔀' : userState.mixing == 'aralashtirilmaydi' ? '⏬' : userState.mixing == 'savollar' ? '🔀' : userState.mixing == 'javoblar' ? '🔀' : ''} ${userState.mixing} \n\n<b>External sharing link:</b>\n${shareLink}`, {
                         reply_markup: {
                             inline_keyboard: [
                                 [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
@@ -150,9 +177,171 @@ export function setupMessageHandlers(bot) {
                         },
                         parse_mode: 'HTML'
                     });
-    
+
                     activeQuizCreation.delete(chatId);
                 }
+                break
+
+            case 'editTitle':
+                if (text === '/back') {
+                    activeQuizCreation.delete(chatId);
+                    await handleReturn(bot, chatId, userState.quizId, userState.messageId);
+                    await handleEditedTest(bot, chatId, userState.quizId);
+                    return;
+                }
+                
+                const quiz = await findQuizById(userState.quizId);
+                if (!quiz) {
+                    await bot.sendMessage(chatId, "Test topilmadi.");
+                    return;
+                }
+
+                quiz.title = text;
+                await quiz.save();
+
+                await bot.sendMessage(chatId, "👍 Sarlavha yangilandi.");
+                await handleDelete(bot, chatId, userState.messageId);
+                await handleEditedTest(bot, chatId, userState.quizId);
+                activeQuizCreation.delete(chatId);
+
+                break;
+        
+            case 'editDescription':
+                if (text === '/skip') {
+                    activeQuizCreation.delete(chatId);
+                    await handleReturn(bot, chatId, userState.quizId, userState.messageId);
+                    await handleEditedTest(bot, chatId, userState.quizId);
+                    return;
+                }
+
+                const quizToUpdate = await findQuizById(userState.quizId);
+                if (!quizToUpdate) {
+                    await bot.sendMessage(chatId, "Test topilmadi.");
+                    return;
+                }
+
+                quizToUpdate.description = text;
+                await quizToUpdate.save();
+
+                await bot.sendMessage(chatId, "👍 Tavsif yangilandi.");
+                await handleDelete(bot, chatId, userState.messageId);
+                await handleEditedTest(bot, chatId, userState.quizId);
+                activeQuizCreation.delete(chatId);
+                break;
+        
+            case 'editTimer':
+                if (timeMapping[text]) {
+                    const quiz = await findQuizById(userState.quizId);
+                    if (!quiz) {
+                        await bot.sendMessage(chatId, "Test topilmadi.");
+                        return;
+                    }
+            
+                    quiz.timeLimit = timeMapping[text];
+                    await quiz.save();
+            
+                    await bot.sendMessage(chatId, "👍 Taymer sozlamalari yangilandi.", {
+                        reply_markup: { remove_keyboard: true }
+                    });
+                    await handleDelete(bot, chatId, userState.messageId);
+                    await handleEditedTest(bot, chatId, userState.quizId);
+                    activeQuizCreation.delete(chatId);
+                }
+                break;
+
+            case 'addQuestion':
+                if (msg.poll) {
+                    const quizData = await readQuizData();
+                    const quiz = quizData[chatId].find(q => q.id === userState.quizId);
+                    
+                    if (!quiz) {
+                        await bot.sendMessage(chatId, "Test topilmadi.");
+                        return;
+                    }                    
+            
+                    const newQuestion = {
+                        question: msg.poll.question,
+                        options: msg.poll.options.map(opt => opt.text),
+                        correctAnswer: msg.poll.correct_option_id,
+                        preQuestionContent: userState.pendingPreQuestionContent || null
+                    };
+            
+                    quiz.questions.push(newQuestion);
+                    await saveQuizData(quizData);
+            
+                    // Update the questions list message
+                    let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
+                        `🖊 ${quiz.questions.length} ta savol\n\n`;
+            
+                    let i = 1;
+                    for (const question of quiz.questions) {
+                        message += `${i}. ${question.question}\n`;
+                        message += `/deleteQuestion_${quiz.id}_${i}\n\n`;
+                        i++;
+                    }
+
+                    await bot.deleteMessage(chatId, activeMessageId.get(chatId));
+
+                    await bot.sendMessage(chatId, '👍 Test Tuzildi.', {reply_markup: {
+                        remove_keyboard: true
+                    }});
+
+                    const messages = await bot.sendMessage(chatId, message, {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quiz.id}` }],
+                                [{ text: "<< Orqaga qaytish", callback_data: `return_${quiz.id}` }]
+                            ]
+                        },
+                        parse_mode: 'HTML'
+                    });
+                    activeMessageId.set(chatId, messages.message_id);
+                    
+            
+                    // Clear the creation state
+                    activeQuizCreation.delete(chatId);
+                } else {
+                    userState.pendingPreQuestionContent = {
+                        type: msg.text ? 'text' : 
+                                msg.photo ? 'photo' :
+                                msg.video ? 'video' :
+                                msg.document ? 'document' :
+                                msg.audio ? 'audio' : 'unknown',
+                        content: msg.text || msg.caption || '',
+                        fileId: msg.photo ? msg.photo[msg.photo.length - 1].file_id :
+                                msg.video ? msg.video.file_id :
+                                msg.document ? msg.document.file_id :
+                                msg.audio ? msg.audio.file_id : null
+                    };
+            
+                    await bot.sendMessage(chatId, 
+                        "Ajoyib! Endi tugmadan foydalanib, menga ushbu xabarga tegishli savolni yuboring.", {
+                        reply_to_message_id: msg.message_id,
+                        reply_markup: {
+                            keyboard: [[{ text: "Savol tuzish", request_poll: { type: "quiz" } }]],
+                            resize_keyboard: true
+                        }
+                    });
+                }
+                break;
+    
+            case 'editMixing':
+                if (mixingOptions[text]) {
+                    const quiz = await findQuizById(userState.quizId);
+                    if (!quiz) {
+                        await bot.sendMessage(chatId, "Test topilmadi.");
+                        return;
+                    }
+
+                    quiz.mixing = mixingOptions[text];
+                    await quiz.save();
+
+                    await bot.sendMessage(chatId, "👍 Tasodifiy sozlamalari yangilandi.");
+                    await handleDelete(bot, chatId, userState.messageId);
+                    await handleEditedTest(bot, chatId, userState.quizId);
+                    activeQuizCreation.delete(chatId);
+                }
+
                 break;
         }
     });

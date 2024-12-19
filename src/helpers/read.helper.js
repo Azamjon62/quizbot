@@ -50,6 +50,7 @@ export async function saveQuizData(data) {
                     title: quiz.title,
                     description: quiz.description,
                     questions: quiz.questions,
+                    mixing: quiz.mixing,
                     timeLimit: quiz.timeLimit,
                     leaderboard: quiz.leaderboard || []
                 };

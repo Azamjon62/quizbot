@@ -1,7 +1,7 @@
 import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
 import { 
     handleViewTests, handleCreateTest, handleStartQuiz, handleReady, handleGroupReady, handleStatistics,
-    handleReturn, handleEdit, handleDeleteTest
+    handleReturn, handleEdit, handleDeleteTest, handleEditQuestion, handleEditTitle, handleEditDescription, handleEditTimer, handleCreateQuestion, handleEditMixing
 } from './handler.functions.callback.js';
 
 export function setupCallbackHandlers(bot) {
@@ -50,12 +50,31 @@ export function setupCallbackHandlers(bot) {
                 const quizId = data.split('deleteTest_')[1];
                 const messageId = callbackQuery.message.message_id;
                 await handleDeleteTest(bot, chatId, quizId, messageId)
-            } 
-            // else if (data.startsWith('editQuestions_')) {
-            //     const quizId = data.split('editQuestions_')[1];
-            //     const messageId = callbackQuery.message.message_id;
-            //     await handleEditQuestion(bot, chatId, quizId, messageId)
-            // }
+            } else if (data.startsWith('editQuestions_')) {
+                const quizId = data.split('editQuestions_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEditQuestion(bot, chatId, quizId, messageId)
+            } else if (data.startsWith('editTitle_')) {
+                const quizId = data.split('editTitle_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEditTitle(bot, chatId, quizId, messageId);
+            } else if (data.startsWith('editDescription_')) {
+                const quizId = data.split('editDescription_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEditDescription(bot, chatId, quizId, messageId);
+            } else if (data.startsWith('editTimer_')) {
+                const quizId = data.split('editTimer_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEditTimer(bot, chatId, quizId, messageId);
+            } else if (data.startsWith('createQuestion_')) {
+                const quizId = data.split('createQuestion_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleCreateQuestion(bot, chatId, quizId, messageId);
+            } else if (data.startsWith('editMixing_')) {
+                const quizId = data.split('editMixing_')[1];
+                const messageId = callbackQuery.message.message_id;
+                await handleEditMixing(bot, chatId, quizId, messageId);
+            }
         } catch (error) {
             console.error('Callback query error:', error);
             await bot.sendMessage(chatId, "An error occurred. Please try again.");

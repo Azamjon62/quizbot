@@ -2,6 +2,68 @@ import { activeQuizSessions, activeQuizCreation, activeGroupQuizSessions } from 
 import { findQuizById } from '../helpers/quiz.helper.js';
 import { showQuizResults, showGroupQuizResults } from '../services/quiz.service.js';
 
+
+function shuffleArray(array) {
+    const newArray = [...array]; // Create a copy to avoid modifying the original
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+}
+
+function prepareQuizContent(quiz, mixingType) {
+    let questions = quiz.questions.map(q => ({
+        ...q,
+        question: q.question,
+        options: [...q.options],
+        correctAnswer: q.correctAnswer,
+        preQuestionContent: q.preQuestionContent ? { ...q.preQuestionContent } : null
+    }));
+    
+    switch (mixingType) {
+        case 'barchasi':
+            // Mix both questions and their answers
+            questions = shuffleArray([...questions]);
+
+            questions = questions.map(q => {
+                const originalCorrectAnswer = q.options[q.correctAnswer];
+                const shuffledOptions = shuffleArray([...q.options]);
+                return {
+                    ...q,
+                    options: shuffledOptions,
+                    correctAnswer: shuffledOptions.indexOf(originalCorrectAnswer)
+                }
+            });
+            break;
+            
+        case 'savollar':
+            // Mix only questions order
+            questions = shuffleArray([...questions]);
+            break;
+            
+        case 'javoblar':
+            // Mix only answers in each question
+            questions = questions.map(q => {
+                const originalCorrectAnswer = q.options[q.correctAnswer];
+                const shuffledOptions = shuffleArray([...q.options]);
+                return {
+                    ...q,
+                    options: shuffledOptions,
+                    correctAnswer: shuffledOptions.indexOf(originalCorrectAnswer)
+                };
+            });
+            break;
+            
+        case 'aralashtirilmaydi':
+        default:
+            // Keep original order
+            break;
+    }
+    
+    return questions;
+}
+
 export function setupPollHandlers(bot) {
     bot.on('poll', async (poll) => {
         try {
@@ -63,7 +125,7 @@ export function setupPollHandlers(bot) {
                 if (!quiz) return;
 
                 const currentQuestionIndex = groupSession.currentQuestion - 1;
-                const question = quiz.questions[currentQuestionIndex];
+                const question = groupSession.mixedQuestions[currentQuestionIndex];
                 if (!question) return;
 
                 let participant = groupSession.participants.get(pollAnswer.user.id);
@@ -93,11 +155,11 @@ export function setupPollHandlers(bot) {
 
             // Check for private quiz
             const privateSession = activeQuizSessions.get(pollAnswer.user.id);
-            if (privateSession) {
+            if (privateSession) {                
                 const quiz = await findQuizById(privateSession.quizId);
                 if (!quiz) return;
 
-                const question = quiz.questions[privateSession.currentQuestion];
+                const question = privateSession.mixedQuestions[privateSession.currentQuestion];
                 if (!question) return;
 
                 if (privateSession.timeout) {
@@ -130,14 +192,19 @@ export async function sendQuizQuestion(bot, chatId) {
             return;
         }
 
-        if (session.currentQuestion >= quiz.questions.length) {
+        // Initialize mixed questions if not already done
+        if (!session.mixedQuestions) {
+            session.mixedQuestions = prepareQuizContent(quiz, quiz.mixing || 'aralashtirilmaydi');
+        }
+
+        if (session.currentQuestion >= session.mixedQuestions.length) {
             await showQuizResults(bot, chatId, session);
             activeQuizSessions.delete(chatId);
             return;
         }
-        
-        const question = quiz.questions[session.currentQuestion];
 
+        const question = session.mixedQuestions[session.currentQuestion];
+        
         if (question.preQuestionContent) {
             const { type, content, fileId } = question.preQuestionContent;
             
@@ -165,7 +232,7 @@ export async function sendQuizQuestion(bot, chatId) {
         }
 
         const poll = await bot.sendPoll(chatId, 
-            `[${session.currentQuestion+1}/${quiz.questions.length}]${question.question}`,
+            `[${session.currentQuestion+1}/${session.mixedQuestions.length}] ${question.question}`,
             question.options,
             {
                 type: 'quiz',
@@ -198,13 +265,17 @@ export async function sendGroupQuizQuestion(bot, chatId) {
             return;
         }
 
-        if (session.currentQuestion >= quiz.questions.length) {
+        if (!session.mixedQuestions) {
+            session.mixedQuestions = prepareQuizContent(quiz, quiz.mixing || 'aralashtirilmaydi');
+        }
+
+        if (session.currentQuestion >= session.mixedQuestions.length) {
             await showGroupQuizResults(bot, chatId, session, quiz);
             activeGroupQuizSessions.delete(chatId);
             return;
         }
         
-        const question = quiz.questions[session.currentQuestion];
+        const question = session.mixedQuestions[session.currentQuestion];
 
         if (question.preQuestionContent) {
             const { type, content, fileId } = question.preQuestionContent;
@@ -233,7 +304,7 @@ export async function sendGroupQuizQuestion(bot, chatId) {
         }
 
         const poll = await bot.sendPoll(chatId, 
-            `[${session.currentQuestion+1}/${quiz.questions.length}] ${question.question}`,
+            `[${session.currentQuestion+1}/${session.mixedQuestions.length}] ${question.question}`,
             question.options,
             {
                 type: 'quiz',

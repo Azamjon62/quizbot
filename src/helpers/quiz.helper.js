@@ -15,3 +15,7 @@ export function validateQuiz(quiz) {
            quiz.questions.length > 0 &&
            quiz.timeLimit > 0;
 }
+
+export async function findAllQuizzesByUserId(userId) {
+    return await Quiz.find({ creator: userId });
+}

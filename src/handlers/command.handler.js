@@ -1,15 +1,17 @@
 import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
-import { activeQuizCreation, activeQuizSessions } from '../bot.js';
+import { activeQuizCreation, activeQuizSessions, activeMessageId } from '../bot.js';
 import { readQuizData } from '../helpers/read.helper.js';
+import { handleDeleteQuestion } from '../handlers/handler.functions.callback.js';
                            // AZ          AS         DO
-const ALLOWED_USER_IDS = [5947470966, 578038920, 892690776];
+const ALLOWED_USER_IDS = [5947470966, 578038920, 892690776, 6365246842];
 export function setupCommandHandlers(bot) {
     // Handler for all commands (messages starting with /)
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
         const userId = msg.from.id;
+        let isCommand = msg.text?.startsWith('/')
 
-        if (!ALLOWED_USER_IDS.includes(userId)) {
+        if (isCommand && !ALLOWED_USER_IDS.includes(userId)) {
             await bot.sendMessage(chatId, "❌ Kechirasiz, siz bu botdan foydalana olmaysiz.");
             return;
         }
@@ -64,7 +66,7 @@ export function setupCommandHandlers(bot) {
                 if (isCreator) {
                     const botDetails = await bot.getMe();
                     const shareLink = `t.me/${botDetails.username}?start=${quizId}`;
-                    const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya\n\n<b>External sharing link:</b>\n${shareLink}`;
+                    const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya · ${quiz.mixing == 'barchasi' ? '🔀' : quiz.mixing == 'aralashtirilmaydi' ? '⏬' : quiz.mixing == 'savollar' ? '🔀' : quiz.mixing == 'javoblar' ? '🔀' : ''} ${quiz.mixing} \n\n<b>External sharing link:</b>\n${shareLink}`;
 
                     await bot.sendMessage(chatId, message, {
                         parse_mode: 'HTML',
@@ -128,5 +130,17 @@ export function setupCommandHandlers(bot) {
                 }
                 break;
         }
+    });
+
+    // Add this to your command handler setup
+    bot.onText(/\/deleteQuestion_(.+)_(\d+)/, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const quizId = match[1];
+        const questionIndex = parseInt(match[2]);
+        const commandMessageId = msg.message_id;
+        const originalMessageId = activeMessageId.get(chatId);
+
+        await bot.deleteMessage(chatId, commandMessageId);
+        await handleDeleteQuestion(bot, chatId, quizId, questionIndex, originalMessageId);
     });
 }

@@ -45,7 +45,7 @@ export async function startQuiz(bot, chatId, quizId, user, isRetake = false) {
         // If user hasn't taken the test, proceed with starting it
         if (activeQuizSessions.has(chatId)) {
             await bot.sendMessage(chatId, 
-                "Siz hozir testlardan birini yechyapsiz. Avval uni tugatishingiz kerak.");
+                "Siz hozir testlardan birini yechyapsiz. Avval uni tugatishingiz kerak. yoki to'xtatish uchun /stop buyrug'ini yuboring.");
             return;
         }
 
@@ -64,7 +64,7 @@ export async function startQuiz(bot, chatId, quizId, user, isRetake = false) {
         });
 
         await bot.sendMessage(chatId, 
-            `"<b>${quiz.title}</b>" Testiga tayyorlaning\n\n` +
+            `🎲 "<b>${quiz.title}</b>" Testiga tayyorlaning\n\n` +
             `🖊 ${quiz.questions.length} ta savol\n` +
             `⏱ Har bir savol uchun ${quiz.timeLimit} soniya\n` +
             `📰 Ovozlar test egasiga ko'rinadigan bo'ladi\n\n` +
@@ -111,7 +111,7 @@ export async function showQuizResults(bot, chatId, session) {
 
         await bot.sendMessage(chatId, 
             `🏁 "${quiz.title}" test yakunlandi!\n\n` +
-            `Siz ${answeredQuestions} ta savol javob berdingiz:\n\n` +
+            `Siz ${answeredQuestions} ta savolga javob berdingiz:\n\n` +
             `✅ To'g'ri – ${correctAnswers}\n` +
             `❌ Xato – ${wrongAnswers}\n` +
             `⌛️ Tashlab ketilgan – ${skippedQuestions}\n\n` +

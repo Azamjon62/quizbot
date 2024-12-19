@@ -1,23 +1,69 @@
 import { readQuizData, saveQuizData } from "../helpers/read.helper.js";
-import { findQuizById } from "../helpers/quiz.helper.js";
-import { activeQuizCreation, activeQuizSessions, activeGroupQuizSessions } from '../bot.js';
+import { findQuizById, findAllQuizzesByUserId } from "../helpers/quiz.helper.js";
+import { activeQuizCreation, activeQuizSessions, activeGroupQuizSessions, activeMessageId } from '../bot.js';
 import { startQuiz } from "../services/quiz.service.js";
 import { sendQuizQuestion, sendGroupQuizQuestion } from "./poll.handler.js";
 
 
-export async function handleViewTests(chatId, bot) {
-    const quizData = await readQuizData();
-    const userQuizzes = quizData[chatId] || [];
+export async function handleDelete(bot, chatId, messageId) {
+    try {
+        await bot.deleteMessage(chatId, messageId);
+    } catch (error) {
+        console.error('Delete test error:', error);
+        await bot.sendMessage(chatId, "Test o'chirishda xatolik yuz berdi.");
+    }
+}
 
-    if (userQuizzes.length === 0) {
+export async function handleEditedTest(bot, chatId, quizId) {
+    try {
+        const quiz = await findQuizById(quizId);
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        const isCreator = quiz.creator === chatId;
+        if (!isCreator) {
+            await bot.sendMessage(chatId, "Siz bu testning yaratuvchisi emassiz.");
+            return;
+        }
+
+        const botDetails = await bot.getMe();
+        const shareLink = `t.me/${botDetails.username}?start=${quizId}`;
+        const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya · ${quiz.mixing == 'barchasi' ? '🔀' : quiz.mixing == 'aralashtirilmaydi' ? '⏬' : quiz.mixing == 'savollar' ? '🔀' : quiz.mixing == 'javoblar' ? '🔀' : ''} ${quiz.mixing} \n\n<b>External sharing link:</b>\n${shareLink}`;
+
+        await bot.sendMessage(chatId, message, {
+            parse_mode: 'HTML',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
+                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
+                    [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
+                    [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
+                    [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]
+                ]
+            }
+        });
+    } catch (error) {
+        console.error('View command error:', error);
+        await bot.sendMessage(chatId, "Test ma'lumotlarini ko'rishda xatolik yuz berdi.");
+    }
+}
+
+
+
+export async function handleViewTests(chatId, bot) {
+    const quizzes = await findAllQuizzesByUserId(chatId);
+
+    if (quizzes.length === 0) {
         await bot.sendMessage(chatId, "Siz hali test yaratmagansiz.");
         return;
     }
 
     let message = "<b>Testlaringiz</b>\n\n";
-    userQuizzes.forEach((quiz, index) => {
+    quizzes.forEach((quiz, index) => {
         const totalParticipants = quiz.leaderboard ? quiz.leaderboard.length : 0;
-        message += `${index + 1}. <b>${quiz.title}</b> - ${totalParticipants} kishi javob berdi\n`;
+        message += `${index + 1}. <b>${quiz.title}</b> - <b>${totalParticipants}</b> kishi javob berdi\n`;
         message += `/view_${quiz.id}\n\n`;
     });
 
@@ -121,34 +167,30 @@ export async function handleGroupReady(bot, chatId, quizId, user) {
 
 export async function handleStatistics(bot, chatId, quizId, messageId) {
     try {
-        const quizData = await readQuizData();
-        let quiz = null;
-
-        for (const userQuizzes of Object.values(quizData)) {
-            const foundQuiz = userQuizzes.find(q => q.id === quizId);
-            if (foundQuiz) {
-                quiz = foundQuiz;
-                break;
-            }
-        }
-
+        const quiz = await findQuizById(quizId);
         if (!quiz) {
             await bot.sendMessage(chatId, "Test topilmadi.");
             return;
         }
 
         const participantsCount = quiz.leaderboard?.length || 0;
+
+        const sortedLeaderboard = quiz.leaderboard
+            ? [...quiz.leaderboard].sort((a, b) => b.correctAnswers - a.correctAnswers)
+            : [];
+
         let message = `🏆 "${quiz.title}" testidagi yuqori natijalar\n\n` +
             `🖊 <b>${quiz.questions.length}</b> ta savol\n` +
             `⏱ Har bir savol uchun ${quiz.timeLimit} soniya\n` +
-            `🤓 <b>${participantsCount}</b> kishi testda qatnashdi`
+            `🤓 <b>${participantsCount}</b> kishi testda qatnashdi`;
 
-            if (participantsCount) {
-                message += `\n\n${quiz.leaderboard?.map((user, index) => `${index + 1}. ${user.username ? `@${user.username}` : `${user.firstName ? user.firstName : ''} ${user.lastName ? user.lastName : ''}`.trim() || 'Anonymous'} - <b>${user.correctAnswers}</b> ta to'g'ri javob`).join('\n')}`;
-            } else {
-                message += ''
-            }
-            
+        if (participantsCount) {
+            message += `\n\n${sortedLeaderboard.map((user, index) => 
+                `${index + 1}. ${user.username ? `@${user.username}` : 
+                `${user.firstName ? user.firstName : ''} ${user.lastName ? user.lastName : ''}`.trim() || 'Anonymous'} - <b>${user.correctAnswers}</b> ta to'g'ri javob`).join('\n')}`;
+        } else {
+            message += ''
+        }
 
         await bot.editMessageText(message, {
             chat_id: chatId,
@@ -168,18 +210,7 @@ export async function handleStatistics(bot, chatId, quizId, messageId) {
 
 export async function handleReturn(bot, chatId, quizId, messageId) {
     try {
-        const quizData = await readQuizData();
-        let quiz = null;
-
-        // Find the quiz
-        for (const userQuizzes of Object.values(quizData)) {
-            const foundQuiz = userQuizzes.find(q => q.id === quizId);
-            if (foundQuiz) {
-                quiz = foundQuiz;
-                break;
-            }
-        }
-
+        const quiz = await findQuizById(quizId);
         if (!quiz) {
             await bot.sendMessage(chatId, "Test topilmadi.");
             return;
@@ -187,22 +218,29 @@ export async function handleReturn(bot, chatId, quizId, messageId) {
 
         const botDetails = await bot.getMe();
         const shareLink = `t.me/${botDetails.username}?start=${quizId}`;
-        const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya\n\n<b>External sharing link:</b>\n${shareLink}`;
+        const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya · ${quiz.mixing == 'barchasi' ? '🔀' : quiz.mixing == 'aralashtirilmaydi' ? '⏬' : quiz.mixing == 'savollar' ? '🔀' : quiz.mixing == 'javoblar' ? '🔀' : ''} ${quiz.mixing} \n\n<b>External sharing link:</b>\n${shareLink}`;
 
-        await bot.editMessageText(message, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
-                    [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
-                    [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
-                    [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
-                    [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]
-                ]
+        try {
+            await bot.editMessageText(message, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: 'Bu testni boshlash', callback_data: `start_${quizId}` }],
+                        [{ text: 'Guruhda testni boshlash', url: `https://t.me/${botDetails.username}?startgroup=${quizId}` }],
+                        [{ text: 'Testni ulashish', switch_inline_query: `${quizId}` }],
+                        [{ text: 'Testni tahrirlash', callback_data: `edit_${quizId}` }],
+                        [{ text: 'Test statistikasi', callback_data: `stats_${quizId}` }]
+                    ]
+                }
+            });
+        } catch (editError) {
+            if (editError.message.includes('message is not modified')) {
+                return;
             }
-        });
+            throw editError;
+        }
     } catch (error) {
         console.error('Return to test error:', error);
         await bot.sendMessage(chatId, "Testga qaytishda xatolik yuz berdi.");
@@ -211,16 +249,7 @@ export async function handleReturn(bot, chatId, quizId, messageId) {
 
 export async function handleEdit(bot, chatId, quizId, messageId) {
     try {
-        const quizData = await readQuizData();
-        let quiz = null;
-
-        for (const userQuizzes of Object.values(quizData)) {
-            const foundQuiz = userQuizzes.find(q => q.id === quizId);
-            if (foundQuiz) {
-                quiz = foundQuiz;
-                break;
-            }
-        }
+        const quiz = await findQuizById(quizId);
 
         if (!quiz) {
             await bot.sendMessage(chatId, "Test topilmadi.");
@@ -229,24 +258,35 @@ export async function handleEdit(bot, chatId, quizId, messageId) {
 
         const botDetails = await bot.getMe();
         const shareLink = `t.me/${botDetails.username}?start=${quizId}`;
-        const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya\n\n<b>External sharing link:</b>\n${shareLink}`;
+        const message = `<b>${quiz.title}</b> <i>${quiz.leaderboard?.length || 0} kishi javob berdi.</i>\n${quiz.description}\n🖊 ${quiz.questions.length} ta savol · ⏱ ${quiz.timeLimit} soniya · ${quiz.mixing == 'barchasi' ? '🔀' : quiz.mixing == 'aralashtirilmaydi' ? '⏬' : quiz.mixing == 'savollar' ? '🔀' : quiz.mixing == 'javoblar' ? '🔀' : ''} ${quiz.mixing} \n\n<b>External sharing link:</b>\n${shareLink}`;
 
-        await bot.editMessageText(message, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'HTML',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "Testni o'chirish", callback_data: `deleteTest_${quizId}` }],
-                    // [{ text: 'Savollarni tahrirlash', callback_data: `editQuestions_${quizId}` }],
-                    // [{ text: 'Sarlavhani tahrirlash', callback_data: `editTitle_${quizId}` }],
-                    // [{ text: 'Tavsifni tahrirlash', callback_data: `editDescription_${quizId}` }],
-                    // [{ text: 'Taymerni sozlamalarini tahrirlash', callback_data: `editTimer_${quizId}` }],
-                    [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
-                ]
+        try {
+            await bot.editMessageText(message, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "Testni o'chirish", callback_data: `deleteTest_${quizId}` }],
+                        [{ text: 'Savollarni tahrirlash', callback_data: `editQuestions_${quizId}` }],
+                        [{ text: 'Sarlavhani tahrirlash', callback_data: `editTitle_${quizId}` }],
+                        [{ text: 'Tavsifni tahrirlash', callback_data: `editDescription_${quizId}` }],
+                        [{ text: 'Taymerni sozlamalarini tahrirlash', callback_data: `editTimer_${quizId}` }],
+                        [{ text: 'Aralashtirish sozlamalarini tahrirlash', callback_data: `editMixing_${quizId}` }],
+                        [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
+                    ]
+                }
+            });
+            
+        } catch (editError) {
+            // If message is not modified, ignore the error
+            if (editError.message.includes('message is not modified')) {
+                return;
             }
-        });
-        
+            // If other error, throw it
+            throw editError;
+        }
+
     } catch (error) {
         console.error('Editing error:', error);
         await bot.sendMessage(chatId, "Tahrirlashda xatolik yuz berdi.");
@@ -287,20 +327,23 @@ export async function handleEditQuestion(bot, chatId, quizId, messageId) {
         let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
             `🖊 ${quiz.questions.length} ta savol\n\n`
 
-        
         let i = 1;
         for (const question of quiz.questions) {
             message += `${i}. ${question.question}\n`;
-            message += `/view_${quizId}_${i}\n\n`;
+            if (quiz.questions.length != 1) {
+                message += `/deleteQuestion_${quizId}_${i}\n\n`;
+            }
             i++;
         }
+
+        activeMessageId.set(chatId, messageId);
         
         await bot.editMessageText(message, {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: "Yangi savol qo'shish", callback_data: `create_test` }],
+                    [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quizId}` }],
                     [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
                 ]
             },
@@ -310,5 +353,191 @@ export async function handleEditQuestion(bot, chatId, quizId, messageId) {
     } catch (error) {
         console.error('Editing questions error:', error);
         await bot.sendMessage(chatId, "Savollarni tahrirlashda xatolik yuz berdi.");
+    }
+}
+
+export async function handleEditTitle(bot, chatId, quizId, messageId) {
+    try {
+        const quiz = await findQuizById(quizId);
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        activeQuizCreation.set(chatId, {
+            step: 'editTitle',
+            quizId: quizId,
+            messageId: messageId,
+            currentTitle: quiz.title
+        });
+
+        await bot.sendMessage(chatId, "O'zgartirish uchun menga testingiz sarlavhasini (masalan, “Qobiliyatni aniqlash testi” yoki “Ayiqlar haqida 10 ta savol”) yuboring. \n\n Bekor qilish uchun /back buyrug'ini yuboring.")        
+    } catch (error) {
+        console.error('Edit title error:', error);
+        await bot.sendMessage(chatId, "Sarlavhani tahrirlashda xatolik yuz berdi.");
+    }
+}
+
+export async function handleEditDescription(bot, chatId, quizId, messageId) {
+    try {
+        const quiz = await findQuizById(quizId);
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        activeQuizCreation.set(chatId, {
+            step: 'editDescription',
+            quizId: quizId,
+            messageId: messageId,
+            currentDescription: quiz.description
+        });
+
+        await bot.sendMessage(chatId,
+            `Menga testingizning yangi tavsifini yuboring. Bu ixtiyoriy, uni boʻsh qoldirish uchun /skip buyrugʻini yuborishingiz ham mumkin.\n`);
+
+    } catch (error) {
+        console.error('Edit description error:', error);
+        await bot.sendMessage(chatId, "Tavsifni tahrirlashda xatolik yuz berdi.");
+    }
+}
+
+export async function handleEditTimer(bot, chatId, quizId, messageId) {
+    try {
+        const quiz = await findQuizById(quizId);
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        // Set editing state
+        activeQuizCreation.set(chatId, {
+            step: 'editTimer',
+            quizId: quizId,
+            messageId: messageId,
+            currentTimeLimit: quiz.timeLimit
+        });
+
+        await bot.sendMessage(chatId, 
+            "Savollar uchun yangi vaqt limitini oʻrnating. Bot vaqt yakunlanishi bilan odamlarga keyingi savolni yuboradi.", {
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "10 Seconds" }, { text: "15 Seconds" }, { text: "30 Seconds" }],
+                        [{ text: "45 Seconds" }, { text: "1 Minute" }, { text: "2 Minutes" }],
+                        [{ text: "3 Minutes" }, { text: "4 Minutes" }, { text: "5 Minutes" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: true
+                }
+        });
+
+    } catch (error) {
+        console.error('Edit timer error:', error);
+        await bot.sendMessage(chatId, "Vaqt chegarasini tahrirlashda xatolik yuz berdi.");
+    }
+}
+
+export async function handleEditMixing(bot, chatId, quizId, messageId) {
+    try {
+        const quiz = await findQuizById(quizId);
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        activeQuizCreation.set(chatId, {
+            step: 'editMixing',
+            quizId: quizId,
+            messageId: messageId,
+            currentMixing: quiz.mixing
+        });
+
+        await bot.sendMessage(chatId, "Savollar va javob variantlari aralashtirilsinmi?", {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Barchasini aralashtirish" }, { text: "Aralashtirilmasin" }],
+                    [{ text: "Faqat savollar" }, { text: "Faqat javoblar" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: true
+            }
+        });
+    } catch (error) {
+        console.error('Edit mixing error:', error);
+        await bot.sendMessage(chatId, "Aralashtirish sozlamalarini tahrirlashda xatolik yuz berdi.");
+    }
+}
+
+
+
+
+
+export async function handleDeleteQuestion(bot, chatId, quizId, questionIndex, messageId) {
+    try {
+        const quizData = await readQuizData();
+        const quiz = quizData[chatId].find(q => q.id === quizId);
+
+        if (!quiz) {
+            await bot.sendMessage(chatId, "Test topilmadi.");
+            return;
+        }
+
+        // Remove the question at the specified index
+        quiz.questions.splice(questionIndex - 1, 1);
+        await saveQuizData(quizData);
+
+        // Update the message with new question list
+        let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
+            `🖊 ${quiz.questions.length} ta savol\n\n`;
+
+        let i = 1;
+        for (const question of quiz.questions) {
+            message += `${i}. ${question.question}\n`;
+            if (quiz.questions.length != 1) {
+                message += `/deleteQuestion_${quizId}_${i}\n\n`;
+            }
+            i++;
+        }
+
+        await bot.editMessageText(message, {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quizId}` }],
+                    [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
+                ]
+            },
+            parse_mode: 'HTML'
+        });
+
+    } catch (error) {
+        console.error('Delete question error:', error);
+        await bot.sendMessage(chatId, "Savolni o'chirishda xatolik yuz berdi.");
+    }
+}
+
+
+export async function handleCreateQuestion(bot, chatId, quizId, messageId) {
+    try {
+        // Set the state for question creation
+        activeQuizCreation.set(chatId, {
+            step: 'addQuestion',
+            quizId: quizId,
+            questions: [],
+            messageId: messageId
+        });
+
+        await bot.sendMessage(chatId, 
+            "Menga keyingi savolingiz bilan soʻrovnoma yuboring. Bunga muqobil ravishda, bu savoldan oldin koʻrsatiladigan matn yoki mediafayl bilan xabar yuborishingiz mumkin.", {
+            reply_markup: {
+                keyboard: [[{ text: "Savol tuzish", request_poll: { type: "quiz" } }]],
+                resize_keyboard: true
+            }
+        });
+
+    } catch (error) {
+        console.error('Create question error:', error);
+        await bot.sendMessage(chatId, "Savol yaratishda xatolik yuz berdi.");
     }
 }

@@ -7,11 +7,22 @@ export async function updateLeaderboard(quiz, userEntry) {
             quiz.leaderboard = [];
         }
 
+        const leaderboardEntry = {
+            chatId: userEntry.chatId,
+            username: userEntry.username || '',
+            firstName: userEntry.firstName || '',
+            lastName: userEntry.lastName || '',
+            correctAnswers: userEntry.correctAnswers || 0,
+            wrongAnswers: userEntry.wrongAnswers || 0,
+            skippedQuestions: userEntry.skippedQuestions || 0,
+            timestamp: new Date()
+        };
+
         const existingEntryIndex = quiz.leaderboard.findIndex(entry => entry.chatId === userEntry.chatId);
                 
         // Only add new entry if user hasn't taken the test before
         if (existingEntryIndex === -1) {
-            quiz.leaderboard.push({ ...userEntry, timestamp: Date.now() });
+            quiz.leaderboard.push(leaderboardEntry);
 
             // Save updated quiz data
             const quizData = await readQuizData();

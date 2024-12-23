@@ -117,7 +117,7 @@ export async function handleReady(bot, chatId, quizId) {
     }, 800);
 }
 
-export async function handleGroupReady(bot, chatId, quizId, user) {
+export async function handleGroupReady(bot, chatId, quizId, user, callbackQuery) {
     const session = activeGroupQuizSessions.get(chatId);
     const quiz = await findQuizById(quizId);
 
@@ -126,7 +126,14 @@ export async function handleGroupReady(bot, chatId, quizId, user) {
         return;
     }
 
-    session.readyUsers.add(user.id);
+    if (session.readyUsers.has(user.id)) {
+        bot.answerCallbackQuery(callbackQuery.id, {
+            text: "Qoyilmaqom!, Test tez orada boshlanadi."
+        });
+        return
+    } else {
+        session.readyUsers.add(user.id);
+    }
 
     let message = `🎲 "${quiz.title}"\n\n` +
         `${quiz.description ? quiz.description + '\n\n' : ''}` +

@@ -33,7 +33,7 @@ export function setupCallbackHandlers(bot) {
 
             } else if (data.startsWith('group_ready_')) {
                 const quizId = data.split('group_ready_')[1];
-                await handleGroupReady(bot, chatId, quizId, user)
+                await handleGroupReady(bot, chatId, quizId, user, callbackQuery)
             } else if (data.startsWith('stats_')) {
                 const quizId = data.split('stats_')[1];
                 const messageId = callbackQuery.message.message_id;

@@ -134,6 +134,10 @@ export async function showQuizResults(bot, chatId, session) {
 
 export async function startGroupQuiz(bot, chatId, quizId) {
     try {
+        if (!bot || !chatId || !quizId) {
+            throw new Error('Missing required parameters');
+        }
+
         const quiz = await findQuizById(quizId);
         if (!quiz) {
             await bot.sendMessage(chatId, "Test topilmadi.");

@@ -336,7 +336,9 @@ export function setupMessageHandlers(bot) {
                     quiz.mixing = mixingOptions[text];
                     await quiz.save();
 
-                    await bot.sendMessage(chatId, "👍 Tasodifiy sozlamalari yangilandi.");
+                    await bot.sendMessage(chatId, "👍 Tasodifiy sozlamalari yangilandi.", {reply_markup: {
+                        remove_keyboard: true
+                    }});
                     await handleDelete(bot, chatId, userState.messageId);
                     await handleEditedTest(bot, chatId, userState.quizId);
                     activeQuizCreation.delete(chatId);

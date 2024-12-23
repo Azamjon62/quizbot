@@ -1,5 +1,5 @@
 import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
-import { activeQuizCreation, activeQuizSessions, activeMessageId } from '../bot.js';
+import { activeQuizCreation, activeQuizSessions, activeMessageId, activeGroupQuizSessions } from '../bot.js';
 import { readQuizData } from '../helpers/read.helper.js';
 import { handleDeleteQuestion } from '../handlers/handler.functions.callback.js';
                            // AZ          AS         DO
@@ -22,15 +22,27 @@ export function setupCommandHandlers(bot) {
 
         // Check if message is from a group
         if (msg.chat.type === 'group' || msg.chat.type === 'supergroup') {
+            const botInfo = await bot.getMe();
+
             // Allow quiz-related commands in groups
             if (text.startsWith('/start')) {
                 const quizId = text.split(' ')[1];
                 await startGroupQuiz(bot, chatId, quizId);
                 return;
+            } else if (text.startsWith('/stop')) {
+                if (activeGroupQuizSessions.has(chatId)) {
+                    const session = activeGroupQuizSessions.get(chatId);
+                    await bot.deleteMessage(chatId, session.startMessageId);
+
+                    activeGroupQuizSessions.delete(chatId);
+                    await bot.sendMessage(chatId, "Test toxtatildi.");
+                } else {
+                    await bot.sendMessage(chatId, "🤔 Toʻxtatish uchun test mavjud emas.");
+                }
+                return;
             }
 
             // For all other commands, redirect to private chat
-            const botInfo = await bot.getMe();
             await bot.sendMessage(chatId, 
                 "Bu bot sizga bir nechta test savollari bilan test tuzishga yordam beradi. Yangi test yaratish yoki yaratgan testlaringiz ro'yxatini ko'rish uchun bot bilan shaxsiy chatga o'ting.", {
                 reply_to_message_id: msg.message_id,

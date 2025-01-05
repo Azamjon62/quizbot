@@ -67,6 +67,16 @@ function prepareQuizContent(quiz, mixingType) {
 export function setupPollHandlers(bot) {
     bot.on('poll', async (poll) => {
         try {
+            // Check if this poll is from an active quiz session
+            const isFromActiveQuiz = Array.from(activeGroupQuizSessions.values()).some(
+                session => session.currentPollId === poll.id
+            );
+
+            // If the poll is from an active quiz, ignore it for quiz creation
+            if (isFromActiveQuiz) {
+                return;
+            }
+
             const chatId = Array.from(activeQuizCreation.keys()).find(
                 id => activeQuizCreation.get(id).step === 'questions'
             );
@@ -75,6 +85,11 @@ export function setupPollHandlers(bot) {
 
             const userState = activeQuizCreation.get(chatId);
             const pollData = poll.poll || poll;
+
+            // Additional validation to ensure this is a quiz creation poll
+            if (!userState || userState.step !== 'questions') {
+                return;
+            }
 
             const questionObj = {
                 question: pollData.question,

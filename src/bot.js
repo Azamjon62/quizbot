@@ -15,6 +15,28 @@ export const activeQuizSessions = new Map();
 export const activeGroupQuizSessions = new Map();
 export const activeMessageId = new Map();
 
+
+async function handleBlockedUser(chatId) {
+    try {
+        // Remove user from active sessions
+        activeQuizSessions.delete(chatId);
+        activeQuizCreation.delete(chatId);
+        activeMessageId.delete(chatId);
+
+        // Clean up group sessions if this was a group
+        if (activeGroupQuizSessions.has(chatId)) {
+            activeGroupQuizSessions.delete(chatId);
+        }
+        
+        // You might want to mark the user as inactive in your database
+        // await updateUserStatus(chatId, 'inactive');
+        
+        console.log(`Cleaned up data for blocked user/group ${chatId}`);
+    } catch (error) {
+        console.error('Error handling blocked user:', error);
+    }
+}
+
 const BOT_CONFIG = {
     polling: {
         interval: 300,
@@ -52,13 +74,27 @@ const connectDB = async (retries = 5) => {
 
 // Error handling middleware
 const setupErrorHandlers = (bot) => {
-    const errorHandler = (type) => (error) => {
-        console.error(`${type} error:`, error.message);
+    const errorHandler = (type = 'error') => async (error) => {
         if (error.code === 'ETELEGRAM') {
-            // Handle Telegram-specific errors
-            console.log('Telegram API error:', error.response.body);
+            const chatId = error.response?.body?.parameters?.chat_id;
+            
+            if (error.response.statusCode === 403) {
+                if (chatId) {
+                    await handleBlockedUser(chatId);
+                }
+                console.log(`${type} error: Bot blocked by user/group ${chatId}`);
+                return;
+            }
+            
+            // Handle other Telegram API errors
+            console.log(`${type} error: ${error.response.body.description}`);
+            return;
         }
+        
+        // Log non-Telegram errors but don't crash
+        console.error(`${type} error:`, error);
     };
+    errorHandler()
 
     bot.on('polling_error', errorHandler('Polling'));
     bot.on('error', errorHandler('Bot'));

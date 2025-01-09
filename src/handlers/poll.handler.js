@@ -264,8 +264,12 @@ export async function sendQuizQuestion(bot, chatId) {
         }, quiz.timeLimit * 1000);
 
     } catch (error) {
-        console.error('Send question error:', error);
-        await bot.sendMessage(chatId, "An error occurred while sending the question.");
+        const session = activeQuizSessions.get(chatId);
+        if (session?.timeout) {
+            clearTimeout(session.timeout);
+        }
+
+        activeQuizSessions.delete(chatId)
     }
 }
 
@@ -340,7 +344,10 @@ export async function sendGroupQuizQuestion(bot, chatId) {
         }, quiz.timeLimit * 1000);
 
     } catch (error) {
-        console.error('Send group question error:', error);
-        await bot.sendMessage(chatId, "Savolni yuborishda xatolik yuz berdi.");
+        const session = activeGroupQuizSessions.get(chatId);
+        if (session?.timeout) {
+            clearTimeout(session.timeout);
+        }
+        activeGroupQuizSessions.delete(chatId);
     }
 }

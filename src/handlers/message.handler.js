@@ -4,6 +4,8 @@ import { readQuizData, saveQuizData } from '../helpers/read.helper.js';
 import { handleEdit, handleDelete, handleEditedTest, handleReturn } from './handler.functions.callback.js';
 import { findQuizById } from '../helpers/quiz.helper.js';
 
+const QUESTIONS_PER_PAGE = 20;
+
 export function setupMessageHandlers(bot) {
     bot.on('message', async (msg) => {
         const chatId = msg.chat.id;
@@ -268,36 +270,79 @@ export function setupMessageHandlers(bot) {
             
                     quiz.questions.push(newQuestion);
                     await saveQuizData(quizData);
+
+                    // Calculate current page (show the last page after adding new question)
+                    const totalPages = Math.ceil(quiz.questions.length / QUESTIONS_PER_PAGE);
+                    const currentPage = totalPages; // Go to last page
+                    const startIndex = (currentPage - 1) * QUESTIONS_PER_PAGE;
+                    const endIndex = Math.min(startIndex + QUESTIONS_PER_PAGE, quiz.questions.length);
             
                     // Update the questions list message
                     let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
-                        `🖊 ${quiz.questions.length} ta savol\n\n`;
+                        `🖊 ${quiz.questions.length} ta savol\n\n` +
+                        `📄 Sahifa ${currentPage}/${totalPages}\n\n`;
             
-                    let i = 1;
-                    for (const question of quiz.questions) {
-                        message += `${i}. ${question.question}\n`;
-                        message += `/deleteQuestion_${quiz.id}_${i}\n\n`;
-                        i++;
+                    // Show only questions for current page
+                    for (let i = startIndex; i < endIndex; i++) {
+                        const question = quiz.questions[i];
+                        message += `${i + 1}. ${question.question}\n`;
+                        message += `/deleteQuestion_${quiz.id}_${i + 1}\n\n`;
                     }
 
-                    await bot.deleteMessage(chatId, activeMessageId.get(chatId));
+                    // Delete the previous message if exists
+                    if (activeMessageId.get(chatId)) {
+                        try {
+                            await bot.deleteMessage(chatId, activeMessageId.get(chatId));
+                        } catch (error) {
+                            console.log('Error deleting previous message:', error);
+                        }
+                    }
 
-                    await bot.sendMessage(chatId, '👍 Test Tuzildi.', {reply_markup: {
-                        remove_keyboard: true
-                    }});
+                    await bot.sendMessage(chatId, '👍 Savol qo\'shildi.', {
+                        reply_markup: {
+                            remove_keyboard: true
+                        }
+                    });
+
+                    // Create pagination buttons
+                    const inlineKeyboard = [];
+
+                    // Navigation row
+                    const navigationRow = [];
+                    if (currentPage > 1) {
+                        navigationRow.push({ 
+                            text: "⬅️ Oldingi", 
+                            callback_data: `editQuestions_${quiz.id}_${currentPage - 1}` 
+                        });
+                    }
+                    if (currentPage < totalPages) {
+                        navigationRow.push({ 
+                            text: "Keyingi ➡️", 
+                            callback_data: `editQuestions_${quiz.id}_${currentPage + 1}` 
+                        });
+                    }
+                    if (navigationRow.length > 0) {
+                        inlineKeyboard.push(navigationRow);
+                    }
+
+                    // Action buttons
+                    inlineKeyboard.push([{ 
+                        text: "Yangi savol qo'shish", 
+                        callback_data: `createQuestion_${quiz.id}` 
+                    }]);
+                    inlineKeyboard.push([{ 
+                        text: "<< Orqaga qaytish", 
+                        callback_data: `return_${quiz.id}` 
+                    }]);
 
                     const messages = await bot.sendMessage(chatId, message, {
                         reply_markup: {
-                            inline_keyboard: [
-                                [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quiz.id}` }],
-                                [{ text: "<< Orqaga qaytish", callback_data: `return_${quiz.id}` }]
-                            ]
+                            inline_keyboard: inlineKeyboard
                         },
                         parse_mode: 'HTML'
                     });
                     activeMessageId.set(chatId, messages.message_id);
                     
-            
                     // Clear the creation state
                     activeQuizCreation.delete(chatId);
                 } else {

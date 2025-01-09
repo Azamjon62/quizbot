@@ -4,6 +4,8 @@ import { activeQuizCreation, activeQuizSessions, activeGroupQuizSessions, active
 import { startQuiz } from "../services/quiz.service.js";
 import { sendQuizQuestion, sendGroupQuizQuestion } from "./poll.handler.js";
 
+const QUESTIONS_PER_PAGE = 20;
+const TESTS_PER_PAGE = 10;
 
 export async function handleDelete(bot, chatId, messageId) {
     try {
@@ -51,28 +53,134 @@ export async function handleEditedTest(bot, chatId, quizId) {
 }
 
 
+export async function handleViewTests(chatId, bot, page = 1) {
+    try {
+        const quizzes = await findAllQuizzesByUserId(chatId);
 
-export async function handleViewTests(chatId, bot) {
-    const quizzes = await findAllQuizzesByUserId(chatId);
+        if (quizzes.length === 0) {
+            await bot.sendMessage(chatId, "Siz hali test yaratmagansiz.");
+            return;
+        }
 
-    if (quizzes.length === 0) {
-        await bot.sendMessage(chatId, "Siz hali test yaratmagansiz.");
-        return;
+        // Calculate pagination
+        const totalPages = Math.ceil(quizzes.length / TESTS_PER_PAGE);
+        const startIndex = (page - 1) * TESTS_PER_PAGE;
+        const endIndex = Math.min(startIndex + TESTS_PER_PAGE, quizzes.length);
+        const currentPageQuizzes = quizzes.slice(startIndex, endIndex);
+
+        let message = "<b>Testlaringiz</b>\n";
+        message += `📄 Sahifa ${page}/${totalPages}\n`;
+        message += `📊 Jami ${quizzes.length} ta test\n\n`;
+
+        currentPageQuizzes.forEach((quiz, index) => {
+            const totalParticipants = quiz.leaderboard ? quiz.leaderboard.length : 0;
+            message += `${startIndex + index + 1}. <b>${quiz.title}</b> - <b>${totalParticipants}</b> kishi javob berdi\n`;
+            message += `/view_${quiz.id}\n\n`;
+        });
+
+        // Create inline keyboard with pagination
+        const inlineKeyboard = [];
+
+        // Navigation row
+        const navigationRow = [];
+        if (page > 1) {
+            navigationRow.push({ 
+                text: "⬅️ Oldingi", 
+                callback_data: `viewTests_${page - 1}` 
+            });
+        }
+        if (page < totalPages) {
+            navigationRow.push({ 
+                text: "Keyingi ➡️", 
+                callback_data: `viewTests_${page + 1}` 
+            });
+        }
+        if (navigationRow.length > 0) {
+            inlineKeyboard.push(navigationRow);
+        }
+
+        // Action button
+        inlineKeyboard.push([{ 
+            text: 'Yangi test yaratish', 
+            callback_data: 'create_test' 
+        }]);
+
+        await bot.sendMessage(chatId, message, {
+            reply_markup: {
+                inline_keyboard: inlineKeyboard
+            },
+            parse_mode: 'HTML'
+        });
+    } catch (error) {
+        console.error('View tests error:', error);
+        await bot.sendMessage(chatId, "Testlarni ko'rishda xatolik yuz berdi.");
     }
+}
 
-    let message = "<b>Testlaringiz</b>\n\n";
-    quizzes.forEach((quiz, index) => {
-        const totalParticipants = quiz.leaderboard ? quiz.leaderboard.length : 0;
-        message += `${index + 1}. <b>${quiz.title}</b> - <b>${totalParticipants}</b> kishi javob berdi\n`;
-        message += `/view_${quiz.id}\n\n`;
-    });
+export async function handleViewTestsPages(chatId, bot, messageId, page = 1) {
+    try {
+        const quizzes = await findAllQuizzesByUserId(chatId);
 
-    await bot.sendMessage(chatId, message, {
-        reply_markup: {
-            inline_keyboard: [[{ text: 'Create new test', callback_data: 'create_test' }]]
-        },
-        parse_mode: 'HTML'
-    });
+        if (quizzes.length === 0) {
+            await bot.sendMessage(chatId, "Siz hali test yaratmagansiz.");
+            return;
+        }
+
+        // Calculate pagination
+        const totalPages = Math.ceil(quizzes.length / TESTS_PER_PAGE);
+        const startIndex = (page - 1) * TESTS_PER_PAGE;
+        const endIndex = Math.min(startIndex + TESTS_PER_PAGE, quizzes.length);
+        const currentPageQuizzes = quizzes.slice(startIndex, endIndex);
+
+        let message = "<b>Testlaringiz</b>\n";
+        message += `📄 Sahifa ${page}/${totalPages}\n`;
+        message += `📊 Jami ${quizzes.length} ta test\n\n`;
+
+        currentPageQuizzes.forEach((quiz, index) => {
+            const totalParticipants = quiz.leaderboard ? quiz.leaderboard.length : 0;
+            message += `${startIndex + index + 1}. <b>${quiz.title}</b> - <b>${totalParticipants}</b> kishi javob berdi\n`;
+            message += `/view_${quiz.id}\n\n`;
+        });
+
+        // Create inline keyboard with pagination
+        const inlineKeyboard = [];
+
+        // Navigation row
+        const navigationRow = [];
+        if (page > 1) {
+            navigationRow.push({ 
+                text: "⬅️ Oldingi", 
+                callback_data: `viewTests_${page - 1}` 
+            });
+        }
+        if (page < totalPages) {
+            navigationRow.push({ 
+                text: "Keyingi ➡️", 
+                callback_data: `viewTests_${page + 1}` 
+            });
+        }
+        if (navigationRow.length > 0) {
+            inlineKeyboard.push(navigationRow);
+        }
+
+        // Action button
+        inlineKeyboard.push([{ 
+            text: 'Yangi test yaratish', 
+            callback_data: 'create_test' 
+        }]);
+
+        await bot.editMessageText(message, {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+                inline_keyboard: inlineKeyboard
+            },
+            parse_mode: 'HTML'
+        });
+    } catch (error) {
+        console.error('View tests error:', error);
+        await bot.sendMessage(chatId, "Testlarni ko'rishda xatolik yuz berdi.");
+    }
 }
 
 export async function handleCreateTest(chatId, bot) {
@@ -321,7 +429,7 @@ export async function handleDeleteTest(bot, chatId, quizId, messageId) {
     }
 }
 
-export async function handleEditQuestion(bot, chatId, quizId, messageId) {
+export async function handleEditQuestion(bot, chatId, quizId, messageId, page = 1) {
     try {
         const quizData = await readQuizData();
         const quiz = quizData[chatId].find(q => q.id === quizId);
@@ -330,29 +438,59 @@ export async function handleEditQuestion(bot, chatId, quizId, messageId) {
             await bot.sendMessage(chatId, "Test topilmadi.");
             return;
         }
+
+        // Calculate pagination
+        const totalPages = Math.ceil(quiz.questions.length / QUESTIONS_PER_PAGE);
+        const startIndex = (page - 1) * QUESTIONS_PER_PAGE;
+        const endIndex = Math.min(startIndex + QUESTIONS_PER_PAGE, quiz.questions.length);
         
         let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
-            `🖊 ${quiz.questions.length} ta savol\n\n`
+            `🖊 ${quiz.questions.length} ta savol\n\n` +
+            `📄 Sahifa ${page}/${totalPages}\n\n`;
 
-        let i = 1;
-        for (const question of quiz.questions) {
-            message += `${i}. ${question.question}\n`;
+        for (let i = startIndex; i < endIndex; i++) {
+            const question = quiz.questions[i];
+            message += `${i + 1}. ${question.question}\n`;
             if (quiz.questions.length != 1) {
-                message += `/deleteQuestion_${quizId}_${i}\n\n`;
+                message += `/deleteQuestion_${quizId}_${i + 1}\n\n`;
             }
-            i++;
         }
 
         activeMessageId.set(chatId, messageId);
+
+        const inlineKeyboard = [];
+
+        const navigationRow = [];
+        if (page > 1) {
+            navigationRow.push({ 
+                text: "⬅️ Oldingi", 
+                callback_data: `editQuestions_${quizId}_${page - 1}` 
+            });
+        }
+        if (page < totalPages) {
+            navigationRow.push({ 
+                text: "Keyingi ➡️", 
+                callback_data: `editQuestions_${quizId}_${page + 1}` 
+            });
+        }
+        if (navigationRow.length > 0) {
+            inlineKeyboard.push(navigationRow);
+        }
+        
+        inlineKeyboard.push([{ 
+            text: "Yangi savol qo'shish", 
+            callback_data: `createQuestion_${quizId}` 
+        }]);
+        inlineKeyboard.push([{ 
+            text: "<< Orqaga qaytish", 
+            callback_data: `return_${quizId}` 
+        }]);
         
         await bot.editMessageText(message, {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: {
-                inline_keyboard: [
-                    [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quizId}` }],
-                    [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
-                ]
+                inline_keyboard: inlineKeyboard
             },
             parse_mode: 'HTML'
         });
@@ -493,27 +631,62 @@ export async function handleDeleteQuestion(bot, chatId, quizId, questionIndex, m
         quiz.questions.splice(questionIndex - 1, 1);
         await saveQuizData(quizData);
 
+        const page = Math.ceil(questionIndex / QUESTIONS_PER_PAGE);
+
+        // Calculate pagination
+        const totalPages = Math.ceil(quiz.questions.length / QUESTIONS_PER_PAGE);
+        const startIndex = (page - 1) * QUESTIONS_PER_PAGE;
+        const endIndex = Math.min(startIndex + QUESTIONS_PER_PAGE, quiz.questions.length);
+
         // Update the message with new question list
         let message = `🎲 '<b>${quiz.title}</b>' testi \n` +
-            `🖊 ${quiz.questions.length} ta savol\n\n`;
+            `🖊 ${quiz.questions.length} ta savol\n\n` +
+            `📄 Sahifa ${page}/${totalPages}\n\n`;
 
-        let i = 1;
-        for (const question of quiz.questions) {
-            message += `${i}. ${question.question}\n`;
+        for (let i = startIndex; i < endIndex; i++) {
+            const question = quiz.questions[i];
+            message += `${i + 1}. ${question.question}\n`;
             if (quiz.questions.length != 1) {
-                message += `/deleteQuestion_${quizId}_${i}\n\n`;
+                message += `/deleteQuestion_${quizId}_${i + 1}\n\n`;
             }
-            i++;
         }
+
+        // Create pagination buttons
+        const inlineKeyboard = [];
+
+        // Navigation row
+        const navigationRow = [];
+        if (page > 1) {
+            navigationRow.push({ 
+                text: "⬅️ Oldingi", 
+                callback_data: `editQuestions_${quizId}_${page - 1}` 
+            });
+        }
+        if (page < totalPages) {
+            navigationRow.push({ 
+                text: "Keyingi ➡️", 
+                callback_data: `editQuestions_${quizId}_${page + 1}` 
+            });
+        }
+        if (navigationRow.length > 0) {
+            inlineKeyboard.push(navigationRow);
+        }
+
+        // Action buttons
+        inlineKeyboard.push([{ 
+            text: "Yangi savol qo'shish", 
+            callback_data: `createQuestion_${quizId}` 
+        }]);
+        inlineKeyboard.push([{ 
+            text: "<< Orqaga qaytish", 
+            callback_data: `return_${quizId}` 
+        }]);
 
         await bot.editMessageText(message, {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: {
-                inline_keyboard: [
-                    [{ text: "Yangi savol qo'shish", callback_data: `createQuestion_${quizId}` }],
-                    [{ text: "<< Orqaga qaytish", callback_data: `return_${quizId}` }]
-                ]
+                inline_keyboard: inlineKeyboard
             },
             parse_mode: 'HTML'
         });

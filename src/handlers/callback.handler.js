@@ -1,7 +1,8 @@
 import { startQuiz, startGroupQuiz } from '../services/quiz.service.js';
 import { 
     handleViewTests, handleCreateTest, handleStartQuiz, handleReady, handleGroupReady, handleStatistics,
-    handleReturn, handleEdit, handleDeleteTest, handleEditQuestion, handleEditTitle, handleEditDescription, handleEditTimer, handleCreateQuestion, handleEditMixing
+    handleReturn, handleEdit, handleDeleteTest, handleEditQuestion, handleEditTitle, handleEditDescription, handleEditTimer, handleCreateQuestion, handleEditMixing,
+    handleViewTestsPages
 } from './handler.functions.callback.js';
 
 export function setupCallbackHandlers(bot) {
@@ -12,7 +13,13 @@ export function setupCallbackHandlers(bot) {
 
         try {
             if (data === 'view_tests') {
-                await handleViewTests(chatId, bot)
+                await handleViewTests(chatId, bot, 1)
+            } else if (data.startsWith('viewTests_')) {
+                const page = parseInt(data.split('_')[1]);
+                const messageId = callbackQuery.message.message_id;
+                if (!isNaN(page)) {
+                    await handleViewTestsPages(chatId, bot, messageId, page);
+                }
             } else if (data === 'create_test') {
                 await handleCreateTest(chatId, bot)
             } else if (data.startsWith('start_')) {
@@ -51,9 +58,9 @@ export function setupCallbackHandlers(bot) {
                 const messageId = callbackQuery.message.message_id;
                 await handleDeleteTest(bot, chatId, quizId, messageId)
             } else if (data.startsWith('editQuestions_')) {
-                const quizId = data.split('editQuestions_')[1];
+                const [, quizId, page] = data.split('_');
                 const messageId = callbackQuery.message.message_id;
-                await handleEditQuestion(bot, chatId, quizId, messageId)
+                await handleEditQuestion(bot, chatId, quizId, messageId, parseInt(page) || 1)
             } else if (data.startsWith('editTitle_')) {
                 const quizId = data.split('editTitle_')[1];
                 const messageId = callbackQuery.message.message_id;
@@ -77,7 +84,7 @@ export function setupCallbackHandlers(bot) {
             }
         } catch (error) {
             console.error('Callback query error:', error);
-            await bot.sendMessage(chatId, "An error occurred. Please try again.");
+            await bot.sendMessage(chatId, "An error occurred while geting Callback. Please try again.");
         }
     });
 
